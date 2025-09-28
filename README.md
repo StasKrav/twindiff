@@ -42,19 +42,23 @@ my-project/
 
 Склонируйте репозиторий:
 
-git clone https://github.com/twindiff.git
+```
+git clone https://github.com/twindiff.git 
 cd twindiff
+```
 
 Установите зависимости
-go mod tidy
-
+```
+go mod tidy `
+```
 Сборка и запуск
 
 Соберите проект:
-
-go build -o comparator
-
+```
+go build -o comparator `
+```
 
 Запустите:
-
-./comparator
+```
+./comparator `
+```

@@ -4,6 +4,7 @@ import (
     "fmt"
     "os/exec"
     "strings"
+    "golang.org/x/text/unicode/norm"
 
     "github.com/gdamore/tcell/v2"
     "github.com/mattn/go-runewidth"
@@ -289,36 +290,75 @@ func truncate(s string, max int) string {
     return s
 }
 
+func normalizeForCompare(s string) string {
+    // Заменяем NBSP на обычный пробел и удаляем некоторые zero-width символы
+    s = strings.Map(func(r rune) rune {
+        switch r {
+        case '\u00A0':
+            return ' '
+        case '\u200B', '\u200C', '\u200D', '\uFEFF':
+            return -1
+        default:
+            return r
+        }
+    }, s)
+
+    // Unicode нормализация (NFC)
+    s = norm.NFC.String(s)
+
+    // Убираем только хвостовые пробелы/табы (не удаляем ведущие, чтобы не менять вид в UI)
+    s = strings.TrimRight(s, " \t")
+
+    return s
+}
+
 func compareTexts(a, b string) string {
+    // Нормализуем окончания строк
+    a = strings.ReplaceAll(a, "\r\n", "\n")
+    b = strings.ReplaceAll(b, "\r\n", "\n")
+
+    // Быстрая проверка: если тексты полностью совпадают после нормализации, вернуть короткое сообщение
+    if norm.NFC.String(a) == norm.NFC.String(b) {
+        return "Тексты идентичны"
+    }
+
     linesA := strings.Split(a, "\n")
     linesB := strings.Split(b, "\n")
-
-    var sb strings.Builder
-
     maxLines := len(linesA)
     if len(linesB) > maxLines {
         maxLines = len(linesB)
     }
 
+    var sb strings.Builder
     for i := 0; i < maxLines; i++ {
-        var lineA, lineB string
+        var origA, origB string
         if i < len(linesA) {
-            lineA = linesA[i]
+            origA = linesA[i]
         }
         if i < len(linesB) {
-            lineB = linesB[i]
+            origB = linesB[i]
         }
-        if lineA != lineB {
-            sb.WriteString(lineA + " ≠ " + lineB + "\n")
+
+        cmpA := normalizeForCompare(origA)
+        cmpB := normalizeForCompare(origB)
+
+        if cmpA == cmpB {
+            // строки равны после нормализации — помечаем ≡ (или можно использовать обычный разделитель)
+            sb.WriteString(origA)
+            sb.WriteString(" ≡ ")
+            sb.WriteString(origB)
+            sb.WriteByte('\n')
+        } else {
+            // различаются — ставим ≠
+            sb.WriteString(origA)
+            sb.WriteString(" ≠ ")
+            sb.WriteString(origB)
+            sb.WriteByte('\n')
         }
     }
 
-    if sb.Len() == 0 {
-        return "Тексты идентичны"
-    }
     return sb.String()
 }
-
 func readClipboard() string {
     out, err := exec.Command("xclip", "-selection", "clipboard", "-o").Output()
     if err != nil {
